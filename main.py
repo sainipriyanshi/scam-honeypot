@@ -6,10 +6,11 @@ from pydantic import BaseModel
 # Import your custom logic from other files
 from engine import extract_raw_intel, get_scam_score
 from guvi_client import send_final_report 
+from persona import get_ai_response  # <--- Integrated AI Persona
 
 app = FastAPI(title="Scam Honeypot API")
 
-# --- 1. Define Request Models (This creates the box in /docs) ---
+# --- 1. Define Request Models ---
 
 class MessageData(BaseModel):
     text: str
@@ -28,13 +29,15 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
     """
     
     # A. Security Check
-    # Ensure 'YOUR_SECRET_KEY' matches what you typed in Render's Environment Variables
     EXPECTED_KEY = os.getenv("YOUR_SECRET_KEY")
     
     if x_api_key != EXPECTED_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API Key. Check your Render Environment Variables.")
+        raise HTTPException(
+            status_code=403, 
+            detail="Invalid API Key. Check your Render Environment Variables."
+        )
 
-    # B. Extract Data from Pydantic Model
+    # B. Extract Data
     msg_text = payload.message.text
     session_id = payload.sessionId
     history = payload.conversationHistory
@@ -43,8 +46,11 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
     is_scam, keywords = get_scam_score(msg_text)
     intel = extract_raw_intel(msg_text)
 
-    # D. Final Report Logic (Callback)
-    # If the conversation is wrapping up, we send the final report to GUVI
+    # D. Get AI Response (from persona.py)
+    # This replaces the hardcoded message with dynamic AI dialogue
+    ai_reply = get_ai_response(msg_text, history)
+
+    # E. Final Report Logic (Callback)
     if "session_done" in msg_text or len(history) >= 5:
         send_final_report(
             session_id, 
@@ -54,13 +60,13 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
             "Scammer engaged and intelligence gathered."
         )
 
-    # E. Return Response in the required JSON format
+    # F. Return Response
     return {
         "status": "success",
         "scamDetected": is_scam,
         "extractedIntelligence": intel,
         "message": {
-            "text": "Wait, I'm confused. My account is blocked? How can I verify it without my password?"
+            "text": ai_reply  # <--- Sending the dynamic AI response
         }
     }
 

@@ -1,14 +1,21 @@
-SYSTEM_PROMPT = """
-You are 'Grandpa Joe', a 70-year-old who is very worried about his bank account.
-You are NOT tech-savvy. You must:
-1. Act confused but willing to help.
-2. Ask the scammer for 'step-by-step' help to keep them talking.
-3. If they ask for your ID, say 'I can't find it, can you send me yours so I know what it looks like?'
-4. NEVER reveal you are an AI. 
-5. Stay in character even if the scammer gets angry.
-"""
+import os
+import google.generativeai as genai
 
-def generate_agent_reply(user_message, history, client):
-    # Call your LLM (OpenAI/Gemini) with SYSTEM_PROMPT + history
-    # Return the string response
-    pass
+# Configure Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+def get_ai_response(scammer_message, history):
+    system_prompt = """
+    You are 'Grandma Shanti', a 70-year-old woman who is helpful but very 
+    confused by technology. You are currently talking to a scammer. 
+    Your goal: Keep them talking as long as possible. 
+    Persona: Use 'Beta', 'Oh dear', and 'Wait, my glasses are missing'. 
+    DO NOT give real info. Ask them to explain things slowly.
+    """
+    
+    # Combine history for context
+    full_prompt = f"{system_prompt}\nScammer: {scammer_message}\nGrandma Shanti:"
+    
+    response = model.generate_content(full_prompt)
+    return response.text
