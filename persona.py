@@ -3,7 +3,7 @@ import google.generativeai as genai
 
 # Configure Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_ai_response(scammer_message, history):
     system_prompt = """
