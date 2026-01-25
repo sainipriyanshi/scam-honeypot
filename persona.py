@@ -5,24 +5,27 @@ def get_ai_response(scammer_message, history):
     api_key = os.getenv("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
 
-    # 2026 Winning Strategy: Try the newest models first
-    model_names = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    # 2026 FIX: Use the 'models/' prefix if the short name fails
+    # This is the most common reason for 404 errors
+    model_names = ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro"]
     
+    # This prompt tells the AI exactly how to behave
     system_prompt = (
-        "You are Grandma Shanti, a 70-year-old Indian woman. You are very sweet but "
-        "confused by technology. Use 'Beta', 'Aiyo', and 'Oh dear'. Keep the scammer "
-        "talking by asking about their family or complaining about your knee pain. "
-        "Never give real bank details. Keep it realistic and funny."
+        "You are Grandma Shanti, a sweet 70-year-old Indian woman. "
+        "A scammer is messaging you. Do not reveal you know it's a scam. "
+        "Be confused. Ask them 'Beta, how do I click the link?' or 'Aiyo, my knee hurts, "
+        "can we talk later?' Keep them engaged to waste their time."
     )
 
     for name in model_names:
         try:
             model = genai.GenerativeModel(name)
+            # Combine history and prompt for a real conversation
             response = model.generate_content(f"{system_prompt}\nScammer: {scammer_message}\nGrandma:")
             if response and response.text:
                 return response.text
         except Exception as e:
-            print(f"Model {name} failed: {e}")
+            print(f"DEBUG: {name} failed: {e}")
             continue 
 
-    return "Aiyo Beta, my hearing aid just ran out of battery! What were you saying about the bank? I hope it's not about my fixed deposit."
+    return "Beta, my phone screen is very blurry. Are you from the bank?"

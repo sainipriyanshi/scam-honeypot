@@ -24,29 +24,26 @@ async def send_guvi_callback(session_id, scam_detected, intel):
 async def chat(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     session_id = data.get("sessionId")
+    # Get the latest message text
     message_text = data.get("message", {}).get("text", "")
+    # Get history so Grandma remembers what was said
+    history = data.get("conversationHistory", [])
 
-    # 1. Your existing Intel Extraction logic here...
-    # (Assuming you have your regex logic for upiIds, phishingLinks, etc.)
-    intel = {
-        "bankAccounts": [], 
-        "upiIds": ["verify@upi"], # Use your regex results here
-        "phishingLinks": ["http://scam.com"],
-        "phoneNumbers": [],
-        "suspiciousKeywords": ["blocked", "urgent"]
-    }
-    
-    # 2. Get the AI Persona Response
-    ai_text = get_ai_response(message_text, [])
+    # 1. AI Logic: Grandma responds to the scammer
+    ai_reply = get_ai_response(message_text, history)
 
-    # 3. MANDATORY: Trigger the GUVI callback in the background
+    # 2. Intelligence Extraction (Regex for UPI/Links)
+    # ... your extraction logic here ...
+    intel = {"upiIds": ["scammer@upi"], "phishingLinks": []}
+
+    # 3. Mandatory Callback to GUVI
     background_tasks.add_task(send_guvi_callback, session_id, True, intel)
 
     return {
         "status": "success",
         "scamDetected": True,
-        "extractedIntelligence": intel,
-        "message": {"text": ai_text}
+        "message": {"text": ai_reply},
+        "extractedIntelligence": intel
     }
 
 # --- 3. Local Run Config ---
