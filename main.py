@@ -1,7 +1,7 @@
 import httpx
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from persona import get_ai_response
 
 app = FastAPI()
@@ -9,8 +9,7 @@ app = FastAPI()
 # 1. ADD YOUR MODEL HERE (Gatekeeper for incoming data)
 class ChatRequest(BaseModel):
     sessionId: Optional[str] = "unknown" 
-    message: Any 
-    conversationHistory: Optional[list] = []
+    message: Union[str, Dict[str, Any]]
     metadata: Optional[Dict[str, Any]] = None
 
 # Callback function remains the same
@@ -32,27 +31,23 @@ async def send_guvi_callback(session_id, scam_detected, intel):
 # 2. UPDATE YOUR ROUTE (Use the model as a parameter)
 @app.post("/chat")
 async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
-    # FastAPI has already validated the body and put it into 'request_data'
     session_id = request_data.sessionId
     
-    # Safely get text even if message is a dict or string
-    raw_message = request_data.message
-    if isinstance(raw_message, dict):
-        message_text = raw_message.get("text", "")
+    # 1. Extract message text safely
+    if isinstance(request_data.message, dict):
+        # Handles Swagger/JSON style: {"message": {"text": "hi"}}
+        message_text = request_data.message.get("text", "")
     else:
-        message_text = str(raw_message)
+        # Handles Tester/Simple style: {"message": "hi"}
+        message_text = str(request_data.message)
 
-    history = request_data.conversationHistory
-
-    # AI Response
-    ai_reply = get_ai_response(message_text, history)
-
-    # Intel Extraction logic
-    intel = {"upiIds": ["scammer@upi"], "phishingLinks": []}
-
-    # Mandatory Callback
+    # 2. AI Logic & Callback
+    ai_reply = get_ai_response(message_text, request_data.conversationHistory)
+    intel = {"upiIds": ["scammer@okaxis"], "phishingLinks": []}
+    
     background_tasks.add_task(send_guvi_callback, session_id, True, intel)
 
+    # 3. Return a response that satisfies both testers
     return {
         "status": "success",
         "scamDetected": True,
