@@ -8,7 +8,7 @@ app = FastAPI()
 
 # 1. ADD YOUR MODEL HERE (Gatekeeper for incoming data)
 class ChatRequest(BaseModel):
-    sessionId: Optional[str] = "default_session" 
+    sessionId: Optional[str] = "unknown" 
     message: Any 
     conversationHistory: Optional[list] = []
     metadata: Optional[Dict[str, Any]] = None
@@ -36,10 +36,11 @@ async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
     session_id = request_data.sessionId
     
     # Safely get text even if message is a dict or string
-    if isinstance(request_data.message, dict):
-        message_text = request_data.message.get("text", "")
+    raw_message = request_data.message
+    if isinstance(raw_message, dict):
+        message_text = raw_message.get("text", "")
     else:
-        message_text = str(request_data.message)
+        message_text = str(raw_message)
 
     history = request_data.conversationHistory
 
