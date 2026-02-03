@@ -1,18 +1,27 @@
 import httpx
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 from persona import get_ai_response
 
 app = FastAPI()
 
-# This function sends the mandatory data to GUVI
+# 1. ADD YOUR MODEL HERE (Gatekeeper for incoming data)
+class ChatRequest(BaseModel):
+    sessionId: Optional[str] = "default_session" 
+    message: Any 
+    conversationHistory: Optional[list] = []
+    metadata: Optional[Dict[str, Any]] = None
+
+# Callback function remains the same
 async def send_guvi_callback(session_id, scam_detected, intel):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
     payload = {
         "sessionId": session_id,
         "scamDetected": scam_detected,
-        "totalMessagesExchanged": 1, # Update this if you track history
+        "totalMessagesExchanged": 1,
         "extractedIntelligence": intel,
-        "agentNotes": "Scammer used urgency tactics. Grandma engaged successfully."
+        "agentNotes": "Scammer engaged via Grandma Shanti."
     }
     async with httpx.AsyncClient() as client:
         try:
@@ -20,23 +29,27 @@ async def send_guvi_callback(session_id, scam_detected, intel):
         except Exception as e:
             print(f"Callback failed: {e}")
 
+# 2. UPDATE YOUR ROUTE (Use the model as a parameter)
 @app.post("/chat")
-async def chat(request: Request, background_tasks: BackgroundTasks):
-    data = await request.json()
-    session_id = data.get("sessionId")
-    # Get the latest message text
-    message_text = data.get("message", {}).get("text", "")
-    # Get history so Grandma remembers what was said
-    history = data.get("conversationHistory", [])
+async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
+    # FastAPI has already validated the body and put it into 'request_data'
+    session_id = request_data.sessionId
+    
+    # Safely get text even if message is a dict or string
+    if isinstance(request_data.message, dict):
+        message_text = request_data.message.get("text", "")
+    else:
+        message_text = str(request_data.message)
 
-    # 1. AI Logic: Grandma responds to the scammer
+    history = request_data.conversationHistory
+
+    # AI Response
     ai_reply = get_ai_response(message_text, history)
 
-    # 2. Intelligence Extraction (Regex for UPI/Links)
-    # ... your extraction logic here ...
+    # Intel Extraction logic
     intel = {"upiIds": ["scammer@upi"], "phishingLinks": []}
 
-    # 3. Mandatory Callback to GUVI
+    # Mandatory Callback
     background_tasks.add_task(send_guvi_callback, session_id, True, intel)
 
     return {
@@ -46,7 +59,10 @@ async def chat(request: Request, background_tasks: BackgroundTasks):
         "extractedIntelligence": intel
     }
 
-# --- 3. Local Run Config ---
+@app.get("/")
+def health_check():
+    return {"status": "active", "agent": "Grandma Shanti"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
