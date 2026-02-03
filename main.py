@@ -61,7 +61,7 @@ async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
 
 @app.get("/")
 def health_check():
-    return {"status": "active", "agent": "Grandma Shanti"}
+    return {"status": "alive"}
 
 if __name__ == "__main__":
     import uvicorn
