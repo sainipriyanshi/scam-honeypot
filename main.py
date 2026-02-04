@@ -50,11 +50,9 @@ async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
             asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
             timeout=20.0
         )
-    except asyncio.TimeoutError:
-        ai_reply = "Beta, I'm having trouble hearing you. Can you repeat that?"
     except Exception as e:
-        print(f"AI Error: {e}")
-        ai_reply = "Oh dear, my telephone line is acting up!"
+        print(f"Chat Route Error: {e}")
+        ai_reply = "Oh dear, the line is crackling!"
 
     # 3. Simple Intel Extraction (Keep it fast!)
     intel = {"upiIds": ["scammer@okaxis"], "phishingLinks": []}
