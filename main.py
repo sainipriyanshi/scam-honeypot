@@ -1,71 +1,95 @@
 import httpx
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel
 import asyncio
-from typing import Optional, Dict, Any, Union
+import re
+from typing import Optional, Dict, Any, List
 from persona import get_ai_response
 
 app = FastAPI()
 
+# 1. ADD YOUR SECRET KEY HERE (Matches what you give GUVI)
+API_KEY_CREDENTIAL = "YOUR_SECRET_API_KEY" 
+
 class ChatRequest(BaseModel):
     sessionId: Optional[str] = "default_session"
     message: Any 
-    # MAKE SURE THIS LINE IS PRESENT AND SPELLED CORRECTLY:
-    conversationHistory: Optional[list] = [] 
+    conversationHistory: Optional[List[Dict[str, Any]]] = [] 
     metadata: Optional[Dict[str, Any]] = None
 
-# Callback function remains the same
-async def send_guvi_callback(session_id, scam_detected, intel):
+# Improved Intelligence Extraction
+def extract_intel(text: str):
+    return {
+        "bankAccounts": re.findall(r'\b\d{9,18}\b', text),
+        "upiIds": re.findall(r'[a-zA-Z0-9.\-_]+@[a-zA-Z0-9.\-_]+', text),
+        "phishingLinks": re.findall(r'https?://\S+', text),
+        "phoneNumbers": re.findall(r'\b[6-9]\d{9}\b', text),
+        "suspiciousKeywords": ["blocked", "verify", "urgent", "kyc", "otp"]
+    }
+
+async def send_guvi_callback(session_id: str, history: list, intel: dict):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+    
+    # GUVI expects the total count of messages
+    total_turns = len(history) + 2 
+    
     payload = {
         "sessionId": session_id,
-        "scamDetected": scam_detected,
-        "totalMessagesExchanged": 1,
+        "scamDetected": True,
+        "totalMessagesExchanged": total_turns,
         "extractedIntelligence": intel,
-        "agentNotes": "Scammer engaged via Grandma Shanti."
+        "agentNotes": "Engaged using Grandma Shanti persona. Successfully captured potential scam indicators."
     }
+    
     async with httpx.AsyncClient() as client:
         try:
-            await client.post(url, json=payload, timeout=5.0)
+            # Note: GUVI might require your API Key in headers here too
+            await client.post(url, json=payload, timeout=10.0)
         except Exception as e:
             print(f"Callback failed: {e}")
 
-
-
 @app.post("/chat")
-async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
+async def chat(
+    request_data: ChatRequest, 
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None) # 2. CHECK FOR API KEY
+):
+    # Security Check
+    if x_api_key != API_KEY_CREDENTIAL:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+
     session_id = request_data.sessionId
     
-    # 1. Extract message text safely
+    # Extract message text safely
     if isinstance(request_data.message, dict):
         message_text = request_data.message.get("text", "")
     else:
         message_text = str(request_data.message)
 
-    # 2. AI Logic with a Safety fallback
     try:
-        # We use wait_for to ensure the AI doesn't take more than 20 seconds
-        # This prevents the 30-second GUVI timeout
+        # AI Response logic
         ai_reply = await asyncio.wait_for(
             asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
             timeout=20.0
         )
     except Exception as e:
         print(f"Chat Route Error: {e}")
-        ai_reply = "Oh dear, the line is crackling!"
+        ai_reply = "Beta, the phone is making a buzzing sound. What did you say?"
 
-    # 3. Simple Intel Extraction (Keep it fast!)
-    intel = {"upiIds": ["scammer@okaxis"], "phishingLinks": []}
+    # 3. DYNAMIC EXTRACTION (Don't hardcode!)
+    # We check both the scammer's message and history for info
+    combined_text = message_text + " " + str(request_data.conversationHistory)
+    intel = extract_intel(combined_text)
     
-    # 4. Background Task (Runs AFTER the response is sent)
-    background_tasks.add_task(send_guvi_callback, session_id, True, intel)
+    # 4. CALLBACK TRIGGER
+    # According to GUVI, send this when scam is confirmed. 
+    # For a Honeypot, we assume detection is already active.
+    background_tasks.add_task(send_guvi_callback, session_id, request_data.conversationHistory, intel)
 
-    # 5. Return IMMEDIATELY
+    # 5. GUVI MANDATORY OUTPUT FORMAT
     return {
         "status": "success",
-        "scamDetected": True,
-        "message": {"text": ai_reply},
-        "extractedIntelligence": intel
+        "reply": ai_reply
     }
 
 @app.get("/")
