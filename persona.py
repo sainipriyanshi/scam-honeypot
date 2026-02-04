@@ -31,12 +31,12 @@ def get_ai_response(scammer_message, history):
         Aman's Response:"""
 
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=f"You are Aman. Respond to this scammer: {scammer_message}"
         )
         
         return response.text
 
     except Exception as e:
-        print(f"Gemini Error: {e}")
+        print(f"Gemini 2.0 Error: {e}")
         return "The connection is weak, could you please send that again?"
