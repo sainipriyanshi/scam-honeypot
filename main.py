@@ -9,14 +9,17 @@ from persona import get_ai_response
 
 app = FastAPI()
 
-# 1. YOUR SECRET KEY (Now correctly set)
+# 1. YOUR SECRET KEY
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
 
 class ChatRequest(BaseModel):
     sessionId: Optional[str] = "default_session"
     message: Any 
-    conversationHistory: Optional[List[Dict[str, Any]]] = [] 
+    conversationHistory: Optional[List[Any]] = [] 
     metadata: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "allow"
 
 # Improved Intelligence Extraction
 def extract_intel(text: str):
@@ -24,14 +27,15 @@ def extract_intel(text: str):
         "bankAccounts": re.findall(r'\b\d{9,18}\b', text),
         "upiIds": re.findall(r'[a-zA-Z0-9.\-_]+@[a-zA-Z0-9.\-_]+', text),
         "phishingLinks": re.findall(r'https?://\S+', text),
-        "phoneNumbers": re.findall(r'\b[6-9]\d{9}\b', text),
+        "phoneNumbers": re.findall(r'[6-9]\d{9}', text), # Simplified for better matching
         "suspiciousKeywords": ["blocked", "verify", "urgent", "kyc", "otp"]
     }
 
 async def send_guvi_callback(session_id: str, history: list, intel: dict):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
     
-    total_turns = len(history) + 2 
+    # Calculate turns based on history
+    total_turns = len(history) + 1
     
     payload = {
         "sessionId": session_id,
@@ -43,7 +47,6 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
     
     async with httpx.AsyncClient() as client:
         try:
-            # Added a print here so you can check your Render logs to see if GUVI accepted it
             response = await client.post(url, json=payload, timeout=10.0)
             print(f"GUVI Callback Status: {response.status_code}")
         except Exception as e:
@@ -59,19 +62,20 @@ async def chat(
     if x_api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
-    # 2. Extract the text properly
-    if isinstance(request_data.message, dict):
-        message_text = request_data.message.get("text", "")
+    # 2. Extract message text (Handles dictionary format from GUVI email)
+    msg = request_data.message
+    if isinstance(msg, dict):
+        message_text = msg.get("text", "")
     else:
-        message_text = str(request_data.message)
+        message_text = str(msg)
 
-    # 3. EXTRACTION HAPPENS HERE (Immediate)
-    # We combine the current message and history to find all details
+    # 3. EXTRACTION (For background callback only)
     combined_text = message_text + " " + str(request_data.conversationHistory)
     intel = extract_intel(combined_text)
 
     # 4. Get AI Response
     try:
+        # Calling the function from persona.py
         ai_reply = await asyncio.wait_for(
             asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
             timeout=20.0
@@ -80,15 +84,14 @@ async def chat(
         print(f"Chat Route Error: {e}")
         ai_reply = "Arey, my internet is slow today. Can you repeat that?"
 
-    # 5. Trigger GUVI background callback
+    # 5. Trigger GUVI background callback (This sends the intel data to them)
     background_tasks.add_task(send_guvi_callback, request_data.sessionId, request_data.conversationHistory, intel)
 
-    # 6. RETURN EVERYTHING (This makes the tester happy)
+    # 6. RETURN ONLY WHAT THE EMAIL REQUESTED
+    # This is the most important part to pass the automated test
     return {
         "status": "success",
-        "reply": ai_reply,
-        "scamDetected": True, # Hardcoded to true for the honeypot
-        "extractedIntelligence": intel
+        "reply": ai_reply
     }
 
 @app.get("/")
@@ -97,6 +100,5 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    # This change ensures it runs on whatever port Render provides
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
