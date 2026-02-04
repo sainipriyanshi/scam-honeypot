@@ -7,7 +7,7 @@ def get_ai_response(scammer_message, history):
         return "I'm sorry, I'm having trouble connecting to the network right now."
 
     try:
-        client = genai.Client(api_key=api_key, timeout=20)
+        client = genai.Client(api_key=api_key)
         
         # New Persona: Aman (Normal Customer)
         # Strategy: Act worried/cooperative to lure the scammer into giving their details.
@@ -32,7 +32,7 @@ def get_ai_response(scammer_message, history):
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=f"You are Aman. Respond to this scammer: {scammer_message}"
+            contents=f"{system_instruction}\n\nScammer: {scammer_message}\n\nAman:"
         )
         
         return response.text
