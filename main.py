@@ -6,10 +6,11 @@ from persona import get_ai_response
 
 app = FastAPI()
 
-# 1. ADD YOUR MODEL HERE (Gatekeeper for incoming data)
 class ChatRequest(BaseModel):
-    sessionId: Optional[str] = "unknown" 
-    message: Union[str, Dict[str, Any]]
+    sessionId: Optional[str] = "default_session"
+    message: Any 
+    # MAKE SURE THIS LINE IS PRESENT AND SPELLED CORRECTLY:
+    conversationHistory: Optional[list] = [] 
     metadata: Optional[Dict[str, Any]] = None
 
 # Callback function remains the same
