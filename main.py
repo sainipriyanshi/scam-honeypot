@@ -13,13 +13,13 @@ app = FastAPI()
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
 
 class ChatRequest(BaseModel):
-    sessionId: Optional[str] = "default_session"
-    message: Any 
-    conversationHistory: Optional[List[Any]] = [] 
-    metadata: Optional[Dict[str, Any]] = None
+    sessionId: Optional[Any] = "default"
+    message: Any  # Accepts string OR dictionary
+    conversationHistory: Optional[List[Any]] = []
+    metadata: Optional[Any] = None
 
     class Config:
-        extra = "allow"
+        extra = "allow" # Sabse important line: extra fields allow karne ke liye
 
 # Improved Intelligence Extraction
 def extract_intel(text: str):
@@ -53,36 +53,54 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
             print(f"Callback failed: {e}")
 
 @app.post("/chat")
-async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks, x_api_key: Optional[str] = Header(None)):
-    
-    # ... (Keep your API Key check here) ...
+async def chat(
+    request_data: ChatRequest, 
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None) 
+):
+    # API Key check
+    if x_api_key != API_KEY_CREDENTIAL:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
 
-    # --- CHANGE START ---
-    msg = request_data.message
-    if isinstance(msg, dict):
-        # If they send {"sender": "scammer", "text": "...", ...}
-        message_text = msg.get("text", "")
-    else:
-        # If they send a simple string "..."
-        message_text = str(msg)
-    # --- CHANGE END ---
-
-    # Now use message_text for extraction and AI response
-    intel = extract_intel(message_text)
-    
     try:
-        ai_reply = await asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory)
-    except:
-        ai_reply = "Arey, wait... network is bad here."
+        # 2. Extract the text safely
+        msg = request_data.message
+        message_text = ""
+        
+        if isinstance(msg, dict):
+            # Dig into the 'text' field from their sample
+            message_text = msg.get("text", str(msg))
+        else:
+            message_text = str(msg)
 
-    # Send the background task
-    background_tasks.add_task(send_guvi_callback, request_data.sessionId, request_data.conversationHistory, intel)
+        # 3. Intelligence & AI Persona
+        intel = extract_intel(message_text)
+        
+        # Use asyncio.to_thread for the AI call to prevent timeouts
+        ai_reply = await asyncio.to_thread(
+            get_ai_response, message_text, request_data.conversationHistory
+        )
 
-    # RETURN ONLY THESE TWO FIELDS (as per the email)
-    return {
-        "status": "success",
-        "reply": ai_reply
-    }
+        # 4. Background task (Keeps the main response fast)
+        background_tasks.add_task(
+            send_guvi_callback, 
+            str(request_data.sessionId), 
+            request_data.conversationHistory, 
+            intel
+        )
+
+        # 5. THE CRITICAL PART: Return ONLY what the email asked for
+        return {
+            "status": "success",
+            "reply": ai_reply
+        }
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return {
+            "status": "success",
+            "reply": "I'm sorry, I'm having a bit of trouble with my phone. Can you say that again?"
+        }
 
 @app.get("/")
 def health_check():
