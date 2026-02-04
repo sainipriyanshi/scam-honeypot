@@ -1,6 +1,7 @@
 import httpx
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
+import asyncio
 from typing import Optional, Dict, Any, Union
 from persona import get_ai_response
 
@@ -29,7 +30,7 @@ async def send_guvi_callback(session_id, scam_detected, intel):
         except Exception as e:
             print(f"Callback failed: {e}")
 
-import asyncio # Add this at the top
+
 
 @app.post("/chat")
 async def chat(request_data: ChatRequest, background_tasks: BackgroundTasks):
