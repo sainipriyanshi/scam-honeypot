@@ -7,7 +7,7 @@ def get_ai_response(scammer_message, history):
         return "I'm sorry, I'm having trouble connecting to the network right now."
 
     try:
-        client = genai.Client(api_key=api_key, http_options={'api_version': 'v1'})
+        client = genai.Client(api_key=api_key, timeout=15)
         
         # New Persona: Aman (Normal Customer)
         # Strategy: Act worried/cooperative to lure the scammer into giving their details.
