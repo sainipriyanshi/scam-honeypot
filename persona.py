@@ -32,7 +32,7 @@ def get_ai_response(scammer_message, history):
 
         response = client.models.generate_content(
             model="gemini-1.5-flash",
-            contents=prompt
+            contents=f"You are Aman. Respond to this scammer: {scammer_message}"
         )
         
         return response.text
