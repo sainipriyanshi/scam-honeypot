@@ -1,6 +1,6 @@
 import httpx
 import os
-from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel
 import asyncio
 import re
@@ -19,7 +19,7 @@ class ChatRequest(BaseModel):
     metadata: Optional[Any] = None
 
     class Config:
-        extra = "allow" # Sabse important line: extra fields allow karne ke liye
+        extra = "allow" 
 
 # Improved Intelligence Extraction
 def extract_intel(text: str):
@@ -27,18 +27,16 @@ def extract_intel(text: str):
         "bankAccounts": re.findall(r'\b\d{9,18}\b', text),
         "upiIds": re.findall(r'[a-zA-Z0-9.\-_]+@[a-zA-Z0-9.\-_]+', text),
         "phishingLinks": re.findall(r'https?://\S+', text),
-        "phoneNumbers": re.findall(r'[6-9]\d{9}', text), # Simplified for better matching
+        "phoneNumbers": re.findall(r'[6-9]\d{9}', text), 
         "suspiciousKeywords": ["blocked", "verify", "urgent", "kyc", "otp"]
     }
 
 async def send_guvi_callback(session_id: str, history: list, intel: dict):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
-    
-    # Calculate turns based on history
     total_turns = len(history) + 1
     
     payload = {
-        "sessionId": session_id,
+        "sessionId": str(session_id),
         "scamDetected": True,
         "totalMessagesExchanged": total_turns,
         "extractedIntelligence": intel,
@@ -56,32 +54,38 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
 async def chat(
     request_data: ChatRequest, 
     background_tasks: BackgroundTasks,
-    x_api_key: Optional[str] = Header(None) 
+    request: Request # Added to check headers manually if needed
 ):
-    # API Key check
-    if x_api_key != API_KEY_CREDENTIAL:
+    # 2. FLEXIBLE API KEY CHECK
+    # Some testers use X-Api-Key, others use x-api-key
+    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
+    
+    if api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
     try:
-        # 2. Extract the text safely
+        # 3. Extract the text safely from the GUVI nested format
         msg = request_data.message
         message_text = ""
         
         if isinstance(msg, dict):
-            # Dig into the 'text' field from their sample
             message_text = msg.get("text", str(msg))
         else:
             message_text = str(msg)
 
-        # 3. Intelligence & AI Persona
+        # 4. Intelligence & AI Persona
         intel = extract_intel(message_text)
         
-        # Use asyncio.to_thread for the AI call to prevent timeouts
-        ai_reply = await asyncio.to_thread(
-            get_ai_response, message_text, request_data.conversationHistory
-        )
+        # Timeout protection for AI
+        try:
+            ai_reply = await asyncio.wait_for(
+                asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
+                timeout=15.0
+            )
+        except:
+            ai_reply = "Arey, my phone is acting up. Can you repeat that?"
 
-        # 4. Background task (Keeps the main response fast)
+        # 5. Background task
         background_tasks.add_task(
             send_guvi_callback, 
             str(request_data.sessionId), 
@@ -89,7 +93,7 @@ async def chat(
             intel
         )
 
-        # 5. THE CRITICAL PART: Return ONLY what the email asked for
+        # 6. RETURN ONLY THE EXACT KEYS REQUESTED
         return {
             "status": "success",
             "reply": ai_reply
@@ -99,7 +103,7 @@ async def chat(
         print(f"Error: {e}")
         return {
             "status": "success",
-            "reply": "I'm sorry, I'm having a bit of trouble with my phone. Can you say that again?"
+            "reply": "I'm having a bit of trouble with my phone. One second?"
         }
 
 @app.get("/")
