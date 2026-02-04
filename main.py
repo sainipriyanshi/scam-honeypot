@@ -9,7 +9,7 @@ from persona import get_ai_response
 app = FastAPI()
 
 # 1. ADD YOUR SECRET KEY HERE (Matches what you give GUVI)
-API_KEY_CREDENTIAL = "YOUR_SECRET_API_KEY" 
+API_KEY_CREDENTIAL = "priyanshi_secret_123" 
 
 class ChatRequest(BaseModel):
     sessionId: Optional[str] = "default_session"
