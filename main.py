@@ -1,4 +1,5 @@
 import httpx
+import os
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel
 import asyncio
@@ -8,7 +9,7 @@ from persona import get_ai_response
 
 app = FastAPI()
 
-# 1. ADD YOUR SECRET KEY HERE (Matches what you give GUVI)
+# 1. YOUR SECRET KEY (Now correctly set)
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
 
 class ChatRequest(BaseModel):
@@ -30,7 +31,6 @@ def extract_intel(text: str):
 async def send_guvi_callback(session_id: str, history: list, intel: dict):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
     
-    # GUVI expects the total count of messages
     total_turns = len(history) + 2 
     
     payload = {
@@ -38,13 +38,14 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
         "scamDetected": True,
         "totalMessagesExchanged": total_turns,
         "extractedIntelligence": intel,
-        "agentNotes": "Engaged using Grandma Shanti persona. Successfully captured potential scam indicators."
+        "agentNotes": "Engaged using Aman persona. Successfully captured potential scam indicators via Regex."
     }
     
     async with httpx.AsyncClient() as client:
         try:
-            # Note: GUVI might require your API Key in headers here too
-            await client.post(url, json=payload, timeout=10.0)
+            # Added a print here so you can check your Render logs to see if GUVI accepted it
+            response = await client.post(url, json=payload, timeout=10.0)
+            print(f"GUVI Callback Status: {response.status_code}")
         except Exception as e:
             print(f"Callback failed: {e}")
 
@@ -52,7 +53,7 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
 async def chat(
     request_data: ChatRequest, 
     background_tasks: BackgroundTasks,
-    x_api_key: Optional[str] = Header(None) # 2. CHECK FOR API KEY
+    x_api_key: Optional[str] = Header(None) 
 ):
     # Security Check
     if x_api_key != API_KEY_CREDENTIAL:
@@ -60,33 +61,27 @@ async def chat(
 
     session_id = request_data.sessionId
     
-    # Extract message text safely
     if isinstance(request_data.message, dict):
         message_text = request_data.message.get("text", "")
     else:
         message_text = str(request_data.message)
 
     try:
-        # AI Response logic
+        # AI Response logic using your persona.py
         ai_reply = await asyncio.wait_for(
             asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
             timeout=20.0
         )
     except Exception as e:
         print(f"Chat Route Error: {e}")
-        ai_reply = "Beta, the phone is making a buzzing sound. What did you say?"
+        ai_reply = "Wait, my phone is acting up. What did you say?"
 
-    # 3. DYNAMIC EXTRACTION (Don't hardcode!)
-    # We check both the scammer's message and history for info
     combined_text = message_text + " " + str(request_data.conversationHistory)
     intel = extract_intel(combined_text)
     
-    # 4. CALLBACK TRIGGER
-    # According to GUVI, send this when scam is confirmed. 
-    # For a Honeypot, we assume detection is already active.
+    # Trigger callback in the background
     background_tasks.add_task(send_guvi_callback, session_id, request_data.conversationHistory, intel)
 
-    # 5. GUVI MANDATORY OUTPUT FORMAT
     return {
         "status": "success",
         "reply": ai_reply
@@ -98,4 +93,6 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # This change ensures it runs on whatever port Render provides
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
