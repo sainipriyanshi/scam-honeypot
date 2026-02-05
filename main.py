@@ -64,7 +64,7 @@ async def chat(
 ):
     # 2. FLEXIBLE API KEY CHECK
     # Some testers use X-Api-Key, others use x-api-key
-    api_key = request.headers.get("X_API_KEY") or request.headers.get("X_API_KEY")
+    api_key = request.headers.get("x-api-key") or request.headers.get("x-api-key")
     
     if api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
