@@ -46,5 +46,5 @@ def get_ai_response(scammer_message, history):
 
     except Exception as e:
         # If it still fails after 5 retries, this will catch it
-        print(f"Gemini API Final Error: {e}")
+        print(f"Detailed Error: {getattr(e, 'message', str(e))}")
         return "Can you send that again? My phone is hanging."
