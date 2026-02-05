@@ -1,7 +1,7 @@
 import httpx
 import os
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 import asyncio
 import re
 from typing import Optional, Dict, Any, List
@@ -12,14 +12,20 @@ app = FastAPI()
 # 1. YOUR SECRET KEY
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
 
+class Message(BaseModel):
+    text: str
+    sender: str
+    timestamp: Optional[Any] = None
+
 class ChatRequest(BaseModel):
-    sessionId: Optional[Any] = "default"
-    message: Any  # Accepts string OR dictionary
+    # Using 'Field' to handle both sessionId and session_id just in case
+    sessionId: Optional[str] = None 
+    message: Any  # Accepts a string OR a dictionary
     conversationHistory: Optional[List[Any]] = []
     metadata: Optional[Any] = None
 
     class Config:
-        extra = "allow" 
+        extra = "allow"
 
 # Improved Intelligence Extraction
 def extract_intel(text: str):
