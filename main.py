@@ -70,36 +70,23 @@ async def chat(
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
     try:
-        # 3. Extract the text safely from the GUVI nested format
-        msg = request_data.message
-        message_text = ""
+        # 2. Extract text using the new model structure
+        # request_data.message.text is the "Your bank account will be blocked..." part
+        scammer_text = request_data.message.text
         
-        if isinstance(msg, dict):
-            message_text = msg.get("text", str(msg))
-        else:
-            message_text = str(msg)
+        # 3. Get AI Response
+        # We use asyncio.to_thread to keep the server fast
+        ai_reply = await asyncio.to_thread(get_ai_response, scammer_text, request_data.conversationHistory)
 
-        # 4. Intelligence & AI Persona
-        intel = extract_intel(message_text)
-        
-        # Timeout protection for AI
-        try:
-            ai_reply = await asyncio.wait_for(
-                asyncio.to_thread(get_ai_response, message_text, request_data.conversationHistory),
-                timeout=15.0
-            )
-        except:
-            ai_reply = "Arey, my phone is acting up. Can you repeat that?"
-
-        # 5. Background task
+        # 4. Intelligence Extraction (Background)
+        intel = extract_intel(scammer_text)
         background_tasks.add_task(
             send_guvi_callback, 
-            str(request_data.sessionId), 
+            request_data.sessionId, 
             request_data.conversationHistory, 
             intel
         )
 
-        # 6. RETURN ONLY THE EXACT KEYS REQUESTED
         return {
             "status": "success",
             "reply": ai_reply
