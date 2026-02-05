@@ -1,48 +1,41 @@
 import os
 import random
-import google.generativeai as genai
-from google.api_core import exceptions
-
-# Configure the API Key globally
-api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
+from google import genai  # Ensure this is the 'google-genai' library
 
 def get_ai_response(scammer_message, history):
+    # 1. Fallback responses if the API fails or quota hits
     fallback_responses = [
         "Arey bhai, please don't block my account! What do I need to do?",
         "I am trying to open the app but it is very slow. Can you help me?",
         "Which SBI branch are you calling from? I will come there tomorrow.",
-        "Oh no! My wife will be so angry if the account is blocked. Please wait.",
-        "I am typing the OTP but it says invalid. Can you send it again?"
+        "Wait, I am typing the OTP but it says invalid. Send again?"
     ]
 
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return random.choice(fallback_responses)
+
     try:
-        # 1. FIXED: Use the correct model initialization (removed genai.Client)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # 2. Setup the Client
+        client = genai.Client(api_key=api_key)
         
-        # 2. PROMPT: Give Aman a clear personality and goal
+        # 3. Create the Persona Prompt
         system_instruction = (
-            "You are Aman, a regular 30-year-old Indian customer. You just received a scam message. "
-            "You are slightly panicked but willing to cooperate. "
-            "Your goal: Act like you don't know how to use the app well so the scammer "
-            "is forced to provide THEIR Bank Account, UPI ID, or Phone Number to 'help' you. "
-            "Keep responses concise (1-2 sentences) and realistic."
+            "You are Aman, a worried 30-year-old Indian customer. "
+            "A scammer is messaging you. Act panicked and cooperative to lure "
+            "them into giving their UPI ID or Bank details. Keep it to 1-2 sentences."
         )
 
-        # 3. CONTEXT: Combine history so Aman remembers previous messages
-        # This helps the AI understand the flow of the scam
-        chat_context = f"{system_instruction}\n\nHistory: {history}\n\nScammer: {scammer_message}\n\nAman:"
-
-        # 4. EXECUTE: Generate the response
-        response = model.generate_content(chat_context)
+        # 4. Generate Content using Gemini 3 Flash
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", # Use 2.0 unless you specifically have 3.0 access
+            contents=f"{system_instruction}\n\nHistory: {history}\n\nScammer: {scammer_message}\n\nAman:"
+        )
         
         if response and response.text:
             return response.text
-        else:
-            return random.choice(fallback_responses)
+        return random.choice(fallback_responses)
 
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        # If the API fails or quota is exhausted, return a realistic 'Aman' fallback
+        print(f"Gemini API Error: {e}")
         return random.choice(fallback_responses)
