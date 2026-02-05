@@ -34,7 +34,7 @@ def extract_intel(text: str):
         "upiIds": re.findall(r'[a-zA-Z0-9.\-_]+@[a-zA-Z0-9.\-_]+', text),
         "phishingLinks": re.findall(r'https?://\S+', text),
         "phoneNumbers": re.findall(r'[6-9]\d{9}', text), 
-        "suspiciousKeywords": ["blocked", "verify", "urgent", "kyc", "otp"]
+        "suspiciousKeywords": list(set(re.findall(r'(?i)(blocked|verify|urgent|kyc|otp|suspend|login|limit)', text)))
     }
 
 async def send_guvi_callback(session_id: str, history: list, intel: dict):
@@ -64,7 +64,7 @@ async def chat(
 ):
     # 2. FLEXIBLE API KEY CHECK
     # Some testers use X-Api-Key, others use x-api-key
-    api_key = request.headers.get("x-api-key") or request.headers.get("x-api-key")
+    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
     
     if api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
@@ -74,12 +74,18 @@ async def chat(
         # request_data.message.text is the "Your bank account will be blocked..." part
         scammer_text = request_data.message.text
         
+        full_conversation_text = scammer_text
+        for turn in request_data.conversationHistory:
+            # Safely get text from history objects
+            prev_msg = turn.get("text", "") if isinstance(turn, dict) else getattr(turn, "text", "")
+            full_conversation_text += f" {prev_msg}"
         # 3. Get AI Response
         # We use asyncio.to_thread to keep the server fast
         ai_reply = await asyncio.to_thread(get_ai_response, scammer_text, request_data.conversationHistory)
 
         # 4. Intelligence Extraction (Background)
-        intel = extract_intel(scammer_text)
+        intel = extract_intel(full_conversation_text)
+
         background_tasks.add_task(
             send_guvi_callback, 
             request_data.sessionId, 
