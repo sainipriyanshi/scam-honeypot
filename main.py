@@ -15,14 +15,14 @@ API_KEY_CREDENTIAL = "priyanshi_secret_123"
 class Message(BaseModel):
     text: str
     sender: str
-    timestamp: Optional[Any] = None
+    timestamp: Optional[int] = None
 
 class ChatRequest(BaseModel):
     # Using 'Field' to handle both sessionId and session_id just in case
-    sessionId: Optional[str] = None 
-    message: Any  # Accepts a string OR a dictionary
+    sessionId: str 
+    message: Message  # Accepts a string OR a dictionary
     conversationHistory: Optional[List[Any]] = []
-    metadata: Optional[Any] = None
+    metadata: Optional[dict] = None
 
     class Config:
         extra = "allow"
