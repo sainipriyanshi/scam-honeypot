@@ -1,10 +1,19 @@
 import os
+import random
 from google import genai
 
 def get_ai_response(scammer_message, history):
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return "I'm sorry, I'm having trouble connecting to the network right now."
+    responses = [
+        "Arey bhai, please don't block my account! What do I need to do?",
+        "I am trying to open the app but it is very slow. Can you help me?",
+        "Which SBI branch are you calling from? I will come there tomorrow.",
+        "Oh no! My wife will be so angry if the account is blocked. Please wait.",
+        "I am typing the OTP but it says invalid. Can you send it again?"
+    ]
+    
+    # Return a random response to look "human"
+    return random.choice(responses)
 
     try:
         client = genai.Client(api_key=api_key)
