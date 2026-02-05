@@ -43,7 +43,7 @@ def get_ai_response(scammer_message, history):
         Aman's Response:"""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=f"{system_instruction}\n\nScammer: {scammer_message}\n\nAman:"
         )
         
