@@ -4,3 +4,4 @@ httpx
 google-genai>=0.3.0
 python-dotenv
 pydantic
+google-generativeai
