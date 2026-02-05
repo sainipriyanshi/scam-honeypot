@@ -16,7 +16,7 @@ def get_ai_response(scammer_message, history):
     return random.choice(responses)
 
     try:
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         # New Persona: Aman (Normal Customer)
         # Strategy: Act worried/cooperative to lure the scammer into giving their details.
