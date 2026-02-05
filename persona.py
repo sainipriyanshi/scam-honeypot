@@ -32,7 +32,12 @@ def get_ai_response(scammer_message, history):
         )
 
         # Preparing the input
-        prompt_content = f"{system_instruction}\n\nHistory: {history}\n\nScammer: {scammer_message}\n\nAman:"
+        prompt_content = (
+            f"{system_instruction}\n"
+            f"Scammer says: '{scammer_message}'\n"
+            f"Aman's goal: Be worried but bait them.\n"
+            "Reply as Aman:"
+        )
 
         # --- UPDATED CALL ---
         # Instead of calling client.models.generate_content directly, 
