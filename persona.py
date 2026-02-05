@@ -1,6 +1,7 @@
 import os
 import random
-from google import genai
+import google.generativeai as genai
+from google.api_core import exceptions
 
 def get_ai_response(scammer_message, history):
     # 1. Setup fallback responses just in case
@@ -21,9 +22,10 @@ def get_ai_response(scammer_message, history):
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
+        model = genai.GenerativeModel('gemini-1.5-flash')
         # New Persona: Aman (Normal Customer)
         # Strategy: Act worried/cooperative to lure the scammer into giving their details.
-        system_instruction = (
+        prompt = (
             "You are Aman, a regular 30-year-old customer. You just received a message regarding your bank/UPI. "
             "You are slightly panicked but willing to cooperate. "
             "Your goal is to be a 'Honeypot': act like you don't know how to use the app well so the scammer "
@@ -31,21 +33,22 @@ def get_ai_response(scammer_message, history):
             "Keep your responses concise and realistic. Do not reveal you are an AI."
         )
 
-        # Formatting the conversation context
-        prompt = f"""
-        System Role: {system_instruction}
+        response = model.generate_content(prompt)
+        # # Formatting the conversation context
+        # prompt = f"""
+        # System Role: {prompt}
         
-        Conversation History:
-        {history}
+        # Conversation History:
+        # {history}
         
-        Latest Scammer Message: "{scammer_message}"
+        # Latest Scammer Message: "{scammer_message}"
         
-        Aman's Response:"""
+        # Aman's Response:"""
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=f"{system_instruction}\n\nScammer: {scammer_message}\n\nAman:"
-        )
+        # response = client.models.generate_content(
+        #     model="gemini-1.5-flash",
+        #     contents=f"{system_instruction}\n\nScammer: {scammer_message}\n\nAman:"
+        # )
         
         if response and response.text:
             return response.text
