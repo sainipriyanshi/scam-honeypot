@@ -3,18 +3,21 @@ import random
 from google import genai
 
 def get_ai_response(scammer_message, history):
-    api_key = os.getenv("GEMINI_API_KEY")
-    responses = [
+    # 1. Setup fallback responses just in case
+    fallback_responses = [
         "Arey bhai, please don't block my account! What do I need to do?",
         "I am trying to open the app but it is very slow. Can you help me?",
         "Which SBI branch are you calling from? I will come there tomorrow.",
         "Oh no! My wife will be so angry if the account is blocked. Please wait.",
         "I am typing the OTP but it says invalid. Can you send it again?"
     ]
-    
-    # Return a random response to look "human"
-    return random.choice(responses)
 
+    api_key = os.getenv("GEMINI_API_KEY")
+    
+    # If no API key is found, use the fallback immediately
+    if not api_key:
+        return random.choice(fallback_responses)
+    
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
@@ -44,7 +47,10 @@ def get_ai_response(scammer_message, history):
             contents=f"{system_instruction}\n\nScammer: {scammer_message}\n\nAman:"
         )
         
-        return response.text
+        if response and response.text:
+            return response.text
+        else:
+            return random.choice(fallback_responses)
 
     except Exception as e:
         print(f"Gemini 2.0 Error: {e}")
