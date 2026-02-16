@@ -1,35 +1,44 @@
 import os
-import google.generativeai as genai
-from tenacity import retry, stop_after_attempt, wait_fixed
+import vertexai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
 
-# 1. Configuration
-api_key = os.getenv("GEMINI_API_KEY", "").strip().replace('"', '')
-genai.configure(api_key=api_key)
+# 1. GCP Configuration
+PROJECT_ID = os.getenv("GCP_PROJECT_ID") 
+LOCATION = "us-central1"  # Or "asia-south1" for Mumbai if your GCP project is set there
 
-# 2. Add Persistence (Retry for network issues)
-@retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
+# Initialize Vertex AI once when the module loads
+vertexai.init(project=PROJECT_ID, location=LOCATION)
+
 def get_ai_response(scammer_message, history):
+    """
+    Uses GCP Vertex AI to generate the Aman persona response.
+    """
     try:
-        # 3. Main Model Attempt
-        model = genai.GenerativeModel('models/gemini-2.0-flash-exp')
-        response = model.generate_content(
-            f"Act as Aman, a confused target. Scammer says: {scammer_message}",
-            generation_config={"max_output_tokens": 100, "temperature": 0.7}
+        # 2. Initialize Model (Gemini 1.5 Flash is highly stable on Vertex)
+        model = GenerativeModel("gemini-1.5-flash")
+        
+        # 3. Professional System Instructions + User Input
+        prompt = (
+            f"Context: You are Aman, a 30-year-old target of a scam. "
+            f"Act confused and panicked to keep the scammer engaged. "
+            f"Keep replies short and realistic.\n\n"
+            f"Scammer says: {scammer_message}\n"
+            f"Aman:"
         )
+
+        # 4. Generation Configuration (Limits tokens to save costs/latency)
+        config = GenerationConfig(
+            max_output_tokens=150,
+            temperature=0.7,
+        )
+
+        response = model.generate_content(prompt, generation_config=config)
+        
         return response.text
 
     except Exception as e:
-        error_msg = str(e).lower()
-        print(f"DEBUG: Initial attempt failed: {error_msg}")
-
-        # 4. Fallback Logic (If the model name is wrong)
-        if "not found" in error_msg or "404" in error_msg:
-            try:
-                print("Switching to fallback model: gemini-pro")
-                fallback_model = genai.GenerativeModel('gemini-pro')
-                return fallback_model.generate_content(scammer_message).text
-            except:
-                pass
-
-        # 5. Last Resort
-        return "Arey, wait... network is very weak here."
+        # Log the error for Render debugging
+        print(f"GCP Vertex AI Error: {str(e)}")
+        
+        # Friendly fallback so the user experience doesn't break
+        return "Arey, wait... my phone is acting very strange. Kya bola aapne?"

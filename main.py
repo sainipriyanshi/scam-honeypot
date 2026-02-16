@@ -1,10 +1,29 @@
-import httpx
 import os
-from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
-from pydantic import BaseModel,Field
-import asyncio
+import json
+import httpx
 import re
-from typing import Optional, Dict, Any, List
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
+from pydantic import BaseModel, Field
+import asyncio
+from typing import Optional, List, Any
+
+# ... other imports ...
+
+# --- 1. CRITICAL: SETUP GCP AUTH FIRST ---
+# This must run before any Vertex AI initialization happens in 'persona'
+if os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
+    try:
+        # Create the physical file Render needs
+        with open("gcp-key.json", "w") as f:
+            f.write(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+        
+        # Tell Google's SDK where to find this file
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-key.json"
+        print("GCP Credentials successfully initialized from environment variable.")
+    except Exception as e:
+        print(f"Failed to initialize GCP credentials: {e}")
+
+# Now you can safely import your persona, which uses Vertex AI
 from persona import get_ai_response
 
 app = FastAPI()
@@ -115,6 +134,7 @@ async def chat(
             "status": "success",
             "reply": "I'm having a bit of trouble with my phone. One second?"
         }
+        
 
 @app.get("/")
 def health_check():
