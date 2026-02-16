@@ -1,45 +1,35 @@
 import os
-import random
 import google.generativeai as genai
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-# --- NEW SECTION: The Retry Wrapper ---
-# Put this OUTSIDE your main get_ai_response function
-
-api_key = os.getenv("GEMINI_API_KEY", "").strip().replace('"', '').replace("'", "")
-
-# 2. Configure the SDK
+# 1. Configuration
+api_key = os.getenv("GEMINI_API_KEY", "").strip().replace('"', '')
 genai.configure(api_key=api_key)
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+# 2. Add Persistence (Retry for network issues)
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
 def get_ai_response(scammer_message, history):
-
-    
     try:
-        # 3. Use 1.5-Flash (It is the most stable for project deployments)
+        # 3. Main Model Attempt
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # 4. Professional System Instructions
-        system_prompt = (
-            "You are Aman, a 30-year-old customer service target. "
-            "Your goal is to act slightly confused and panicked to keep the "
-            "scammer talking so we can collect their info. "
-            "Keep responses short and realistic."
+        response = model.generate_content(
+            f"Act as Aman, a confused target. Scammer says: {scammer_message}",
+            generation_config={"max_output_tokens": 100, "temperature": 0.7}
         )
-        
-        full_prompt = f"{system_prompt}\n\nScammer says: {scammer_message}\n\nAman:"
-
-
-
-        response = model.generate_content(full_prompt)
-        response.text
-        
-        # # 5. Safety Check
-        # if response.text:
-        #     return response.text
-        # return "I am not sure I understand what you want me to do with my bank app."
+        return response.text
 
     except Exception as e:
-        # This will log the EXACT reason for the ClientError in your Render logs
-        print(f"CRITICAL AI ERROR: {str(e)}")
-        raise e
+        error_msg = str(e).lower()
+        print(f"DEBUG: Initial attempt failed: {error_msg}")
+
+        # 4. Fallback Logic (If the model name is wrong)
+        if "not found" in error_msg or "404" in error_msg:
+            try:
+                print("Switching to fallback model: gemini-pro")
+                fallback_model = genai.GenerativeModel('gemini-pro')
+                return fallback_model.generate_content(scammer_message).text
+            except:
+                pass
+
+        # 5. Last Resort
+        return "Arey, wait... network is very weak here."
