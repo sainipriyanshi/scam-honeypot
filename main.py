@@ -1,6 +1,6 @@
 import httpx
 import os
-from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request,Response
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request,RedirectResponse
 from pydantic import BaseModel,Field
 import asyncio
 import re
@@ -10,9 +10,9 @@ from persona import get_ai_response
 app = FastAPI()
 
 # Add this to stop the 404 logs
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return Response(status_code=204)
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/docs")
 
 # 1. YOUR SECRET KEY
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
