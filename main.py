@@ -9,10 +9,9 @@ from persona import get_ai_response
 
 app = FastAPI()
 
-# Add this to stop the 404 logs
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return Response(status_code=204)
+@app.get("/chat")
+async def chat_get_info():
+    return {"message": "Please use POST to send chat messages to Aman."}
 
 # 1. YOUR SECRET KEY
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
