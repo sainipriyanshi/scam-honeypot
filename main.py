@@ -1,7 +1,6 @@
 import httpx
 import os
-from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request 
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel,Field
 import asyncio
 import re
@@ -9,11 +8,6 @@ from typing import Optional, Dict, Any, List
 from persona import get_ai_response
 
 app = FastAPI()
-
-# Add this to stop the 404 logs
-@app.get("/", include_in_schema=False)
-async def root():
-    return RedirectResponse(url="/docs")
 
 # 1. YOUR SECRET KEY
 API_KEY_CREDENTIAL = "priyanshi_secret_123" 
@@ -24,15 +18,16 @@ class Message(BaseModel):
     timestamp: Optional[int] = None
 
 class ChatRequest(BaseModel):
+    # Using 'Field' to handle both sessionId and session_id just in case
     sessionId: str 
-    message: Message  
+    message: Message  # Accepts a string OR a dictionary
     conversationHistory: Optional[List[Any]] = []
     metadata: Optional[dict] = None
 
     class Config:
         extra = "allow"
 
-
+# Improved Intelligence Extraction
 def extract_intel(text: str):
     return {
         "bankAccounts": re.findall(r'\b\d{9,18}\b', text),
@@ -65,32 +60,30 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
 async def chat(
     request_data: ChatRequest, 
     background_tasks: BackgroundTasks,
-    request: Request,
-    key: Optional[str] =None
+    request: Request # Added to check headers manually if needed
 ):
+    # 2. FLEXIBLE API KEY CHECK
+    # Some testers use X-Api-Key, others use x-api-key
+    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
     
+    if api_key != API_KEY_CREDENTIAL:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
 
-   api_key_header = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
-   
-   if api_key_header != API_KEY_CREDENTIAL and key != API_KEY_CREDENTIAL:
-        print(f"403 Blocked: Header={api_key_header}, URL_Key={key}")
-
-
-   try:
-     
-
+    try:
+        # 2. Extract text using the new model structure
+        # request_data.message.text is the "Your bank account will be blocked..." part
         scammer_text = request_data.message.text
         
         full_conversation_text = scammer_text
         for turn in request_data.conversationHistory:
-           
+            # Safely get text from history objects
             prev_msg = turn.get("text", "") if isinstance(turn, dict) else getattr(turn, "text", "")
             full_conversation_text += f" {prev_msg}"
-        
-
+        # 3. Get AI Response
+        # We use asyncio.to_thread to keep the server fast
         ai_reply = await asyncio.to_thread(get_ai_response, scammer_text, request_data.conversationHistory)
 
-       
+        # 4. Intelligence Extraction (Background)
         intel = extract_intel(full_conversation_text)
 
         background_tasks.add_task(
@@ -105,16 +98,16 @@ async def chat(
             "reply": ai_reply
         }
 
-   except Exception as e:
+    except Exception as e:
         print(f"Error: {e}")
         return {
             "status": "success",
             "reply": "I'm having a bit of trouble with my phone. One second?"
         }
 
-# @app.get("/")
-# def health_check():
-#     return {"status": "alive"}
+@app.get("/")
+def health_check():
+    return {"status": "alive"}
 
 if __name__ == "__main__":
     import uvicorn
