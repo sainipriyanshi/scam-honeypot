@@ -11,7 +11,7 @@ genai.configure(api_key=api_key)
 def get_ai_response(scammer_message, history):
     try:
         # 3. Main Model Attempt
-        model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('models/gemini-2.0-flash-exp')
         response = model.generate_content(
             f"Act as Aman, a confused target. Scammer says: {scammer_message}",
             generation_config={"max_output_tokens": 100, "temperature": 0.7}
