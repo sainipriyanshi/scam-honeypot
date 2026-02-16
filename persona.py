@@ -32,11 +32,12 @@ def get_ai_response(scammer_message, history):
 
 
         response = model.generate_content(full_prompt)
+        response.text
         
-        # 5. Safety Check
-        if response.text:
-            return response.text
-        return "I am not sure I understand what you want me to do with my bank app."
+        # # 5. Safety Check
+        # if response.text:
+        #     return response.text
+        # return "I am not sure I understand what you want me to do with my bank app."
 
     except Exception as e:
         # This will log the EXACT reason for the ClientError in your Render logs

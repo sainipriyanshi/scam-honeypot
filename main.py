@@ -68,7 +68,7 @@ async def chat(
     api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key") or key
     
     print(f"Incoming request key: {api_key}")
-    
+
     if api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
@@ -77,6 +77,14 @@ async def chat(
         # request_data.message.text is the "Your bank account will be blocked..." part
         scammer_text = request_data.message.text
         
+        if not scammer_text or not scammer_text.strip():
+            print("Validation Warning: Received empty scammer_text")
+            return {
+                "status": "success",
+                "reply": "Wait, I didn't catch that. My signal is a bit weak here..."
+            }
+
+
         full_conversation_text = scammer_text
         for turn in request_data.conversationHistory:
             # Safely get text from history objects
