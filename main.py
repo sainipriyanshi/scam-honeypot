@@ -60,11 +60,14 @@ async def send_guvi_callback(session_id: str, history: list, intel: dict):
 async def chat(
     request_data: ChatRequest, 
     background_tasks: BackgroundTasks,
-    request: Request # Added to check headers manually if needed
+    request: Request,
+    key: Optional[str] = None 
 ):
     # 2. FLEXIBLE API KEY CHECK
     # Some testers use X-Api-Key, others use x-api-key
-    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
+    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key") or key
+    
+    print(f"Incoming request key: {api_key}")
     
     if api_key != API_KEY_CREDENTIAL:
         raise HTTPException(status_code=403, detail="Invalid API Key")
