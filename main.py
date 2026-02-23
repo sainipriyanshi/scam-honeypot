@@ -1,15 +1,29 @@
 import os
 from typing import List, Optional
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-# Import your custom logic from other files
+# Import your custom logic
 from engine import extract_raw_intel, get_scam_score
 from guvi_client import send_final_report 
 
 app = FastAPI(title="Scam Honeypot API")
 
-# --- 1. Define Request Models (This creates the box in /docs) ---
+# --- 1. HEALTH CHECK ROUTES (Fixes the 404 errors) ---
+
+@app.get("/")
+@app.get("/health")
+def home():
+    """
+    Returns a 200 OK status to keep the hosting provider happy.
+    """
+    return {
+        "status": "online", 
+        "message": "Scam Honeypot API is running",
+        "version": "1.0.0"
+    }
+
+# --- 2. Define Request Models ---
 
 class MessageData(BaseModel):
     text: str
@@ -19,32 +33,28 @@ class ChatRequest(BaseModel):
     message: MessageData
     conversationHistory: List[dict] = []
 
-# --- 2. Define the POST Endpoint ---
+# --- 3. Define the POST Endpoint ---
 
 @app.post("/chat")
 async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header(None)):
     """
     Endpoint for the GUVI Honeypot to send scammer messages.
     """
-    
-    # A. Security Check
-    # Ensure 'YOUR_SECRET_KEY' matches what you typed in Render's Environment Variables
+    # Security Check
     EXPECTED_KEY = os.getenv("YOUR_SECRET_KEY")
-    
     if x_api_key != EXPECTED_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API Key. Check your Render Environment Variables.")
+        raise HTTPException(status_code=403, detail="Invalid API Key.")
 
-    # B. Extract Data from Pydantic Model
+    # Data Extraction
     msg_text = payload.message.text
     session_id = payload.sessionId
     history = payload.conversationHistory
 
-    # C. Run Analysis (from engine.py)
+    # Analysis Logic
     is_scam, keywords = get_scam_score(msg_text)
     intel = extract_raw_intel(msg_text)
 
-    # D. Final Report Logic (Callback)
-    # If the conversation is wrapping up, we send the final report to GUVI
+    # Final Report Logic
     if "session_done" in msg_text or len(history) >= 5:
         send_final_report(
             session_id, 
@@ -54,7 +64,6 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
             "Scammer engaged and intelligence gathered."
         )
 
-    # E. Return Response in the required JSON format
     return {
         "status": "success",
         "scamDetected": is_scam,
@@ -64,7 +73,8 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
         }
     }
 
-# --- 3. Local Run Config ---
+# --- 4. Local Run Config ---
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Changed port to 10000 to match your Uvicorn logs
+    uvicorn.run(app, host="0.0.0.0", port=10000)
