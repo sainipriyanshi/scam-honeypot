@@ -1,49 +1,67 @@
-import httpx
-from fastapi import FastAPI, Request, BackgroundTasks
-from persona import get_ai_response
+import os
+from typing import List, Optional
+from fastapi import FastAPI, Header, HTTPException, Request
+from pydantic import BaseModel
 
-app = FastAPI()
+# Import your custom logic from other files
+from engine import extract_raw_intel, get_scam_score
+from guvi_client import send_final_report 
 
-# This function sends the mandatory data to GUVI
-async def send_guvi_callback(session_id, scam_detected, intel):
-    url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
-    payload = {
-        "sessionId": session_id,
-        "scamDetected": scam_detected,
-        "totalMessagesExchanged": 1, # Update this if you track history
-        "extractedIntelligence": intel,
-        "agentNotes": "Scammer used urgency tactics. Grandma engaged successfully."
-    }
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(url, json=payload, timeout=5.0)
-        except Exception as e:
-            print(f"Callback failed: {e}")
+app = FastAPI(title="Scam Honeypot API")
+
+# --- 1. Define Request Models (This creates the box in /docs) ---
+
+class MessageData(BaseModel):
+    text: str
+
+class ChatRequest(BaseModel):
+    sessionId: str
+    message: MessageData
+    conversationHistory: List[dict] = []
+
+# --- 2. Define the POST Endpoint ---
 
 @app.post("/chat")
-async def chat(request: Request, background_tasks: BackgroundTasks):
-    data = await request.json()
-    session_id = data.get("sessionId")
-    # Get the latest message text
-    message_text = data.get("message", {}).get("text", "")
-    # Get history so Grandma remembers what was said
-    history = data.get("conversationHistory", [])
+async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header(None)):
+    """
+    Endpoint for the GUVI Honeypot to send scammer messages.
+    """
+    
+    # A. Security Check
+    # Ensure 'YOUR_SECRET_KEY' matches what you typed in Render's Environment Variables
+    EXPECTED_KEY = os.getenv("YOUR_SECRET_KEY")
+    
+    if x_api_key != EXPECTED_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API Key. Check your Render Environment Variables.")
 
-    # 1. AI Logic: Grandma responds to the scammer
-    ai_reply = get_ai_response(message_text, history)
+    # B. Extract Data from Pydantic Model
+    msg_text = payload.message.text
+    session_id = payload.sessionId
+    history = payload.conversationHistory
 
-    # 2. Intelligence Extraction (Regex for UPI/Links)
-    # ... your extraction logic here ...
-    intel = {"upiIds": ["scammer@upi"], "phishingLinks": []}
+    # C. Run Analysis (from engine.py)
+    is_scam, keywords = get_scam_score(msg_text)
+    intel = extract_raw_intel(msg_text)
 
-    # 3. Mandatory Callback to GUVI
-    background_tasks.add_task(send_guvi_callback, session_id, True, intel)
+    # D. Final Report Logic (Callback)
+    # If the conversation is wrapping up, we send the final report to GUVI
+    if "session_done" in msg_text or len(history) >= 5:
+        send_final_report(
+            session_id, 
+            is_scam, 
+            len(history) + 1, 
+            intel, 
+            "Scammer engaged and intelligence gathered."
+        )
 
+    # E. Return Response in the required JSON format
     return {
         "status": "success",
-        "scamDetected": True,
-        "message": {"text": ai_reply},
-        "extractedIntelligence": intel
+        "scamDetected": is_scam,
+        "extractedIntelligence": intel,
+        "message": {
+            "text": "Wait, I'm confused. My account is blocked? How can I verify it without my password?"
+        }
     }
 
 # --- 3. Local Run Config ---
