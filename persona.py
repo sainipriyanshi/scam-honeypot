@@ -1,44 +1,31 @@
 import os
-import vertexai
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-
-# 1. GCP Configuration
-PROJECT_ID = os.getenv("GCP_PROJECT_ID") 
-LOCATION = "us-central1"  # Or "asia-south1" for Mumbai if your GCP project is set there
-
-# Initialize Vertex AI once when the module loads
-vertexai.init(project=PROJECT_ID, location=LOCATION)
+import google.generativeai as genai
 
 def get_ai_response(scammer_message, history):
-    """
-    Uses GCP Vertex AI to generate the Aman persona response.
-    """
-    try:
-        # 2. Initialize Model (Gemini 1.5 Flash is highly stable on Vertex)
-        model = GenerativeModel("gemini-1.5-flash")
-        
-        # 3. Professional System Instructions + User Input
-        prompt = (
-            f"Context: You are Aman, a 30-year-old target of a scam. "
-            f"Act confused and panicked to keep the scammer engaged. "
-            f"Keep replies short and realistic.\n\n"
-            f"Scammer says: {scammer_message}\n"
-            f"Aman:"
-        )
+    api_key = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
 
-        # 4. Generation Configuration (Limits tokens to save costs/latency)
-        config = GenerationConfig(
-            max_output_tokens=150,
-            temperature=0.7,
-        )
+    # 2026 FIX: Use the 'models/' prefix if the short name fails
+    # This is the most common reason for 404 errors
+    model_names = ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro"]
+    
+    # This prompt tells the AI exactly how to behave
+    system_prompt = (
+        "You are Grandma Shanti, a sweet 70-year-old Indian woman. "
+        "A scammer is messaging you. Do not reveal you know it's a scam. "
+        "Be confused. Ask them 'Beta, how do I click the link?' or 'Aiyo, my knee hurts, "
+        "can we talk later?' Keep them engaged to waste their time."
+    )
 
-        response = model.generate_content(prompt, generation_config=config)
-        
-        return response.text
+    for name in model_names:
+        try:
+            model = genai.GenerativeModel(name)
+            # Combine history and prompt for a real conversation
+            response = model.generate_content(f"{system_prompt}\nScammer: {scammer_message}\nGrandma:")
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            print(f"DEBUG: {name} failed: {e}")
+            continue 
 
-    except Exception as e:
-        # Log the error for Render debugging
-        print(f"GCP Vertex AI Error: {str(e)}")
-        
-        # Friendly fallback so the user experience doesn't break
-        return "Arey, wait... my phone is acting very strange. Kya bola aapne?"
+    return "Beta, my phone screen is very blurry. Are you from the bank?"

@@ -1,7 +1,5 @@
 fastapi
 uvicorn
-httpx
-google-cloud-aiplatform
+google-generativeai
 python-dotenv
-pydantic
-tenacity
+httpx

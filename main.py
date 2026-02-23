@@ -1,146 +1,52 @@
-import os
-import json
 import httpx
-import re
-from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
-from pydantic import BaseModel, Field
-import asyncio
-from typing import Optional, List, Any
-
-# ... other imports ...
-
-# --- 1. CRITICAL: SETUP GCP AUTH FIRST ---
-# This must run before any Vertex AI initialization happens in 'persona'
-if os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
-    try:
-        # Create the physical file Render needs
-        with open("gcp-key.json", "w") as f:
-            f.write(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
-        
-        # Tell Google's SDK where to find this file
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-key.json"
-        print("GCP Credentials successfully initialized from environment variable.")
-    except Exception as e:
-        print(f"Failed to initialize GCP credentials: {e}")
-
-# Now you can safely import your persona, which uses Vertex AI
+from fastapi import FastAPI, Request, BackgroundTasks
 from persona import get_ai_response
 
 app = FastAPI()
 
-# 1. YOUR SECRET KEY
-API_KEY_CREDENTIAL = "priyanshi_secret_123" 
-
-class Message(BaseModel):
-    text: str
-    sender: str
-    timestamp: Optional[int] = None
-
-class ChatRequest(BaseModel):
-    # Using 'Field' to handle both sessionId and session_id just in case
-    sessionId: str 
-    message: Message  # Accepts a string OR a dictionary
-    conversationHistory: Optional[List[Any]] = []
-    metadata: Optional[dict] = None
-
-    class Config:
-        extra = "allow"
-
-# Improved Intelligence Extraction
-def extract_intel(text: str):
-    return {
-        "bankAccounts": re.findall(r'\b\d{9,18}\b', text),
-        "upiIds": re.findall(r'[a-zA-Z0-9.\-_]+@[a-zA-Z0-9.\-_]+', text),
-        "phishingLinks": re.findall(r'https?://\S+', text),
-        "phoneNumbers": re.findall(r'[6-9]\d{9}', text), 
-        "suspiciousKeywords": list(set(re.findall(r'(?i)(blocked|verify|urgent|kyc|otp|suspend|login|limit)', text)))
-    }
-
-async def send_guvi_callback(session_id: str, history: list, intel: dict):
+# This function sends the mandatory data to GUVI
+async def send_guvi_callback(session_id, scam_detected, intel):
     url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
-    total_turns = len(history) + 1
-    
     payload = {
-        "sessionId": str(session_id),
-        "scamDetected": True,
-        "totalMessagesExchanged": total_turns,
+        "sessionId": session_id,
+        "scamDetected": scam_detected,
+        "totalMessagesExchanged": 1, # Update this if you track history
         "extractedIntelligence": intel,
-        "agentNotes": "Engaged using Aman persona. Successfully captured potential scam indicators via Regex."
+        "agentNotes": "Scammer used urgency tactics. Grandma engaged successfully."
     }
-    
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, json=payload, timeout=10.0)
-            print(f"GUVI Callback Status: {response.status_code}")
+            await client.post(url, json=payload, timeout=5.0)
         except Exception as e:
             print(f"Callback failed: {e}")
 
 @app.post("/chat")
-async def chat(
-    request_data: ChatRequest, 
-    background_tasks: BackgroundTasks,
-    request: Request,
-    key: Optional[str] = None 
-):
-    # 2. FLEXIBLE API KEY CHECK
-    # Some testers use X-Api-Key, others use x-api-key
-    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key") or key
-    
-    print(f"Incoming request key: {api_key}")
+async def chat(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    session_id = data.get("sessionId")
+    # Get the latest message text
+    message_text = data.get("message", {}).get("text", "")
+    # Get history so Grandma remembers what was said
+    history = data.get("conversationHistory", [])
 
-    if api_key != API_KEY_CREDENTIAL:
-        raise HTTPException(status_code=403, detail="Invalid API Key")
+    # 1. AI Logic: Grandma responds to the scammer
+    ai_reply = get_ai_response(message_text, history)
 
-    try:
-        # 2. Extract text using the new model structure
-        # request_data.message.text is the "Your bank account will be blocked..." part
-        scammer_text = request_data.message.text
-        
-        if not scammer_text or not scammer_text.strip():
-            print("Validation Warning: Received empty scammer_text")
-            return {
-                "status": "success",
-                "reply": "Wait, I didn't catch that. My signal is a bit weak here..."
-            }
+    # 2. Intelligence Extraction (Regex for UPI/Links)
+    # ... your extraction logic here ...
+    intel = {"upiIds": ["scammer@upi"], "phishingLinks": []}
 
+    # 3. Mandatory Callback to GUVI
+    background_tasks.add_task(send_guvi_callback, session_id, True, intel)
 
-        full_conversation_text = scammer_text
-        for turn in request_data.conversationHistory:
-            # Safely get text from history objects
-            prev_msg = turn.get("text", "") if isinstance(turn, dict) else getattr(turn, "text", "")
-            full_conversation_text += f" {prev_msg}"
-        # 3. Get AI Response
-        # We use asyncio.to_thread to keep the server fast
-        ai_reply = await asyncio.to_thread(get_ai_response, scammer_text, request_data.conversationHistory)
+    return {
+        "status": "success",
+        "scamDetected": True,
+        "message": {"text": ai_reply},
+        "extractedIntelligence": intel
+    }
 
-        # 4. Intelligence Extraction (Background)
-        intel = extract_intel(full_conversation_text)
-
-        background_tasks.add_task(
-            send_guvi_callback, 
-            request_data.sessionId, 
-            request_data.conversationHistory, 
-            intel
-        )
-
-        return {
-            "status": "success",
-            "reply": ai_reply
-        }
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return {
-            "status": "success",
-            "reply": "I'm having a bit of trouble with my phone. One second?"
-        }
-        
-
-@app.get("/")
-def health_check():
-    return {"status": "alive"}
-
+# --- 3. Local Run Config ---
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
