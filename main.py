@@ -41,7 +41,7 @@ async def handle_message(payload: ChatRequest, x_api_key: Optional[str] = Header
     Endpoint for the GUVI Honeypot to send scammer messages.
     """
     # Security Check
-    EXPECTED_KEY = os.getenv("YOUR_SECRET_KEY")
+    EXPECTED_KEY = os.getenv("x-api-key")
     if x_api_key != EXPECTED_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key.")
 
